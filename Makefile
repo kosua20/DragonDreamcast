@@ -3,7 +3,7 @@ EXEC_NAME = dragon
 EXEC_ELF = build/$(EXEC_NAME).elf
 EXEC_CDI = $(EXEC_NAME).cdi
 
-FILES = main romdisk
+FILES = helpers scene main romdisk
 
 OBJECTS=$(patsubst %, build/%.o, $(FILES))
 
