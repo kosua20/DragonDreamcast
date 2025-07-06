@@ -1,7 +1,17 @@
 #ifndef SCENE_H
 #define SCENE_H
 
+typedef struct Texture {
+	pvr_ptr_t textureAlloc;
+	pvr_ptr_t texture;
+	uint16_t w;
+	uint16_t h;
+	uint8_t palette;
+} Texture;
+
 typedef struct Object {
+	Texture texture;
+	
 	vec3f_t* vertices;
 	vec3f_t* normals;
 	const float* uvs;
@@ -9,15 +19,12 @@ typedef struct Object {
 
 	vector_t position;
 	float scale;
-	float angle;
+	float angleY;
+	float angleZ;
 	uint32_t vCount;
 	uint32_t iCount;
 	float shininess;
 	bool lit;
-	pvr_ptr_t texture;
-	pvr_ptr_t textureCompressed;
-	uint16_t tSide;
-	unsigned char tPalette;
 } Object;
 
 typedef struct Scene {
