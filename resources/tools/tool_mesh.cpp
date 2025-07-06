@@ -273,7 +273,7 @@ int main(int argc, char** argv){
 	
 	of << "vec3f_t vertices_" << basename << "[" << vertices_count << "] " << attribute << "= {" << std::endl;
 	for(int i = 0; i < mesh.positions.size(); i+=3){
-		of << "\t{.x= " << scale*mesh.positions[i] << ", .y=" << scale*mesh.positions[i+1] <<  ", .z=" << scale*mesh.positions[i+2] <<"},\n";
+		of << "\t{.x= " << -scale*mesh.positions[i] << ", .y=" << scale*mesh.positions[i+1] <<  ", .z=" << scale*mesh.positions[i+2] <<"},\n";
 		
 	}
 	of << "};" << std::endl << std::endl;
@@ -287,7 +287,7 @@ int main(int argc, char** argv){
 
 	of << "float texcoords_" << basename << "[" << 2*vertices_count << "] = {" << std::endl;
 	for(int i = 0; i < mesh.texcoords.size(); i+=2){
-		of << "\t" << mesh.texcoords[i] << ", " << mesh.texcoords[i+1] << ",\n";
+		of << "\t" << mesh.texcoords[i] << ", " << (1.0f-mesh.texcoords[i+1]) << ",\n";
 		
 	}
 	of << "};" << std::endl << std::endl;
