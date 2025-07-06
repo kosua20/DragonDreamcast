@@ -77,9 +77,9 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 		// Apply local transform
 		mat_load(&camera->viewProj); 
 		mat_translate(obj->position.x, obj->position.y, obj->position.z);
-		// Models are flipped along X.
-		mat_scale(-obj->scale, obj->scale, obj->scale);
-		mat_rotate_y(obj->angle);
+		mat_scale(obj->scale, obj->scale, obj->scale);
+		mat_rotate_y(obj->angleY);
+		mat_rotate_x(obj->angleZ);
 
 		// Transform object vertices into scratch buffer.
 		mat_transform((vector_t*)obj->vertices, (vector_t*)scratchVertices, obj->vCount, sizeof(vec3f_t));
@@ -89,7 +89,8 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 		if(obj->lit){
 			mat_identity();
 			// No translation for light direction
-			mat_rotate_y(-obj->angle);
+			mat_rotate_x(obj->angleZ);
+			mat_rotate_y(obj->angleY);
 			localLight = scene->light; 
 			mat_trans_single3(localLight.x, localLight.y, localLight.z);
 			// Norm *should* be preserved by transformation
@@ -98,10 +99,15 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 
 		// Prepare state for draw call
 		// Init context
+		const Texture* tex = &(obj->texture);
+		uint32_t formatFlags = 0u;
+		if(tex->palette != 0xFF){
+			formatFlags = PVR_TXRFMT_PAL8BPP | PVR_TXRFMT_8BPP_PAL(tex->palette);
+		} else {
+			formatFlags = PVR_TXRFMT_RGB565;
+		}
 		pvr_poly_cxt_t cxt;
-		pvr_poly_cxt_txr(&cxt, PVR_LIST_OP_POLY, PVR_TXRFMT_VQ_ENABLE | PVR_TXRFMT_TWIDDLED | PVR_TXRFMT_PAL8BPP | PVR_TXRFMT_8BPP_PAL(obj->tPalette), 
-		//pvr_poly_cxt_txr(&cxt, PVR_LIST_OP_POLY, PVR_TXRFMT_RGB565,
-			obj->tSide, obj->tSide, obj->texture, PVR_FILTER_NONE);
+		pvr_poly_cxt_txr(&cxt, PVR_LIST_OP_POLY, PVR_TXRFMT_VQ_ENABLE | PVR_TXRFMT_TWIDDLED | formatFlags, tex->w, tex->h, tex->texture, PVR_FILTER_BILINEAR);
 		cxt.gen.culling = PVR_CULLING_CW; 
 		cxt.gen.shading = PVR_SHADE_GOURAUD;
 		cxt.gen.specular = PVR_SPECULAR_DISABLE; //TODO
