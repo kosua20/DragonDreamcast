@@ -68,17 +68,7 @@ void update(Camera* camera, Scene* scene, float time){
 
 void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 	
-	// Init context
-	pvr_poly_cxt_t cxt;
-	pvr_poly_cxt_col(&cxt, PVR_LIST_OP_POLY);
-	cxt.gen.culling = PVR_CULLING_NONE; 
-	// Generate header from state.
-	pvr_poly_hdr_t hdr;
-	pvr_poly_compile(&hdr, &cxt);
-	pvr_prim(&hdr, sizeof(hdr));
-	// Init draw state
-	pvr_dr_state_t drs;
-	pvr_dr_init(&drs);
+
 
 	// General camera transformation    
 	for(uint8_t objectId = 0; objectId < scene->count; ++objectId){
@@ -105,6 +95,29 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 			// Norm *should* be preserved by transformation
 			normalize3(&localLight);
 		}
+
+		// Prepare state for draw call
+		// Init context
+		pvr_poly_cxt_t cxt;
+		pvr_poly_cxt_txr(&cxt, PVR_LIST_OP_POLY, PVR_TXRFMT_VQ_ENABLE | PVR_TXRFMT_TWIDDLED | PVR_TXRFMT_PAL8BPP | PVR_TXRFMT_8BPP_PAL(obj->tPalette), 
+		//pvr_poly_cxt_txr(&cxt, PVR_LIST_OP_POLY, PVR_TXRFMT_RGB565,
+			obj->tSide, obj->tSide, obj->texture, PVR_FILTER_NONE);
+		cxt.gen.culling = PVR_CULLING_CW; 
+		cxt.gen.shading = PVR_SHADE_GOURAUD;
+		cxt.gen.specular = PVR_SPECULAR_DISABLE; //TODO
+		cxt.fmt.color = PVR_CLRFMT_INTENSITY;
+		cxt.depth.comparison = PVR_DEPTHCMP_GREATER;
+		cxt.depth.write = PVR_DEPTHWRITE_ENABLE;
+		cxt.txr.mipmap = PVR_MIPMAP_DISABLE;
+		cxt.txr.mipmap_bias = PVR_MIPBIAS_NORMAL;
+		// Generate header from state.
+		pvr_poly_hdr_t hdr;
+		pvr_poly_compile(&hdr, &cxt);
+		pvr_prim(&hdr, sizeof(hdr));
+
+		// Init draw state
+		pvr_dr_state_t drs;
+		pvr_dr_init(&drs);
 		
 		for(uint32_t tId = 0; tId < obj->iCount; tId += 3){  
 
@@ -120,27 +133,35 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 				v->z = vProj->z;
 				v->u = obj->uvs[2 * index + 0];
 				v->v = obj->uvs[2 * index + 1];
-				float lighting = 1.f;
+				float diffuse = 1.f;
+				float specular = 0.f;
 				if(obj->lit){
 					// Get the normal
 					vec3f_t* n = &obj->normals[index];
 					float dotNL = n->x * localLight.x + n->y * localLight.y + n->z * localLight.z;
-					float diffuse = clamp(dotNL, 0.0f, 1.0f);
-					diffuse += 0.1f; // Ambient
-					lighting = clamp(diffuse, 0.0, 1.0f);
+					// Diffuse
+					diffuse = clamp(dotNL, 0.0f, 1.0f);
+					// Ambient
+					diffuse += 0.1f;
+					// Specular
+					// TODO
+					specular = clamp(-dotNL, 0.0f, 1.0f);
 				};
-				unsigned char intensity = (unsigned char)(lighting  * 255.f);
-				v->argb = 0xFF000000 | intensity << 16 | intensity << 8 | intensity;
-				v->oargb = 0;
+				v->argb = *(uint32_t*)(&diffuse);
+				v->oargb = *(uint32_t*)(&specular);
 				pvr_dr_commit(v);
 			}
 		   
-		}
+		} 
+		pvr_dr_finish(); 
 	}
-	pvr_dr_finish(); 
 }
 
 int main(int argc, char **argv) {
+
+	// Mount romdisk
+	fs_romdisk_mount("/data", romdisk, 1);
+
 
 	pvr_init_params_t params = {
 		/* Enable opaque polygons with size 16 */
@@ -158,7 +179,7 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 	pvr_set_bg_color(0.2f, 0.0f, 0.4f);
-
+	pvr_set_pal_format(PVR_PAL_RGB565);
 	// Camera setup
 	Camera camera;
 	initCamera(&camera);

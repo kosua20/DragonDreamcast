@@ -10,6 +10,12 @@
 
 #include "data.h"
 
+void prepareTexture(Object* obj){
+	obj->texture = NULL;
+	obj->tSide = 1;
+	obj->tPalette = 0;
+}
+
 void initScene(Scene* scene){
 	scene->light.x = 1.0f;
 	scene->light.y = 1.0f;
@@ -32,6 +38,7 @@ void initScene(Scene* scene){
 	scene->objects[0].angle = 0.0f;
 	scene->objects[0].shininess = 5.0f;
 	scene->objects[0].lit = true;
+	prepareTexture(&scene->objects[0]);
 
 	// Floor
 	scene->objects[1].vertices = &vertices_plane[0];
@@ -47,6 +54,7 @@ void initScene(Scene* scene){
 	scene->objects[1].angle = 0.0f;
 	scene->objects[1].shininess = 20.0f;
 	scene->objects[1].lit = true;
+	prepareTexture(&scene->objects[1]);
 
 	// Dragon
 	scene->objects[2].vertices = &vertices_dragon[0];
@@ -62,6 +70,7 @@ void initScene(Scene* scene){
 	scene->objects[2].angle = 0.0f;
 	scene->objects[2].shininess = 40.0f;
 	scene->objects[2].lit = true;
+	prepareTexture(&scene->objects[2]);
 
 	// Skybox
 	scene->objects[3].vertices = &vertices_cube[0];
@@ -77,11 +86,89 @@ void initScene(Scene* scene){
 	scene->objects[3].angle = 0.0f;
 	scene->objects[3].shininess = 0.0f;
 	scene->objects[3].lit = false;
+	prepareTexture(&scene->objects[3]);
 	
 	scene->maxVertexCount = 0;
 	for(unsigned int i = 0; i < scene->count; ++i){
 		scene->maxVertexCount = MAX(scene->maxVertexCount, scene->objects[i].vCount);
 	}
+
+	FILE* f = fopen("/data/floor.dt", "rb");
+
+	if(!f){
+		printf("uhoh\n");
+	}
+
+	unsigned char fourCC[4];
+	fread(&fourCC[0], sizeof(unsigned char), 4, f);
+	
+	uint32_t sizeTexture;
+	fread(&sizeTexture, sizeof(uint32_t), 1, f);
+
+	unsigned char flags[4];
+	fread(&flags[0], sizeof(char), 4, f);
+	// Assume compressed.
+	uint16_t codebookSize = flags[2] != 0 ? flags[2]+1 : 0;
+	uint16_t paletteSize = flags[3] != 0 ? flags[3]+1 : 0;
+	
+	uint16_t w;
+	fread(&w, sizeof(uint16_t), 1, f);
+	uint16_t h;
+	fread(&h, sizeof(uint16_t), 1, f);
+
+	printf("Codebook: %u paletteSize: %u width: %u height: %u\n", codebookSize, paletteSize, w, h);
+
+	sizeTexture -= 32u; //Skip header.
+
+	fseek(f, 32, SEEK_SET);
+	char* data = (char*)malloc(sizeTexture);
+	fread(data, sizeof(char), sizeTexture, f);
+	fclose(f);
+
+	pvr_ptr_t tex = pvr_mem_malloc(sizeTexture);
+	pvr_txr_load(data, tex, sizeTexture );
+	free(data);
+
+	for(int i = 0; i < 4; ++i){
+		scene->objects[i].textureCompressed = tex;
+		scene->objects[i].texture = tex - 2048 + (codebookSize)*8;
+		scene->objects[i].tSide = w;
+		scene->objects[i].tPalette = 0;
+	}
+	
+	// Open the palette
+	FILE *fpal = fopen("/data/floor.dt.pal", "rb");
+	
+	fread(&fourCC[0], sizeof(char), 4, fpal);
+	printf("FourCC: %c%c%c%c\n", fourCC[0], fourCC[1], fourCC[2], fourCC[3]);
+	
+	uint32_t palSize;
+	fread(&palSize, sizeof(uint32_t), 1, fpal);
+	printf("PaletteSize: %lu \n", palSize);
+
+	for(unsigned i = 0; i < palSize; i++) {
+		uint32_t packedColor; 
+		fread(&packedColor, sizeof(uint32_t), 1, fpal);
+		// ARGB8888 to RGB565
+		uint16_t r = (packedColor >> 16u) & 0xFF;
+		uint16_t g = (packedColor >>  8u) & 0xFF;
+		uint16_t b = (packedColor >>  0u) & 0xFF;
+		// Truncate
+		r >>= 3u;
+		g >>= 2u;
+		b >>= 3u;
+		// Pack in lower 16bits
+		uint32_t color = (r << 11u) | (g << 5u) | b;
+		pvr_set_pal_entry(i , color );
+	}
+
+	fclose(fpal);
+
+	
+	
+
+	printf("Loaded %lu vs %lu\n", sizeTexture/2, (uint32_t)w * (uint32_t)w);
+	
 
 }
 

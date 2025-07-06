@@ -14,6 +14,10 @@ typedef struct Object {
 	uint32_t iCount;
 	float shininess;
 	bool lit;
+	pvr_ptr_t texture;
+	pvr_ptr_t textureCompressed;
+	uint16_t tSide;
+	unsigned char tPalette;
 } Object;
 
 typedef struct Scene {
