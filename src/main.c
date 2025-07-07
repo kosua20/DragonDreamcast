@@ -117,29 +117,34 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 				packedLightings[2 * i] = 0xFF000000 | (diffClamped << 16u) | (diffClamped << 8u) | diffClamped;
 				
 				// Specular
-				// Reflect light dir around normal
-				float dotNL2 = 2.f * dotNL;
-				vector_t r;
-				r.x = dotNL2 * n->x - localLight.x;
-				r.y = dotNL2 * n->y - localLight.y;
-				r.z = dotNL2 * n->z - localLight.z;
-				normalize3(&r);
-				// Compute vector from surface to camera.
-				vec3f_t* vObj = &obj->vertices[i];
-				vector_t v; 
-				v.x = localCamera.x - vObj->x;
-				v.y = localCamera.y - vObj->y;
-				v.z = localCamera.z - vObj->z;
-				normalize3(&v);
-
-				float dotRV = (r.x * v.x + r.y * v.y + r.z * v.z);
-				dotRV = MAX(dotRV, 0.f);
-				float specular = 1.f;
-				for(uint8_t sId = 0; sId < obj->shininess; ++sId){
-					specular *= dotRV;
+				unsigned char specClamped = 0u;
+				// Only if diffuse positive.
+				if(dotNL >= 0.f){
+					// Reflect light dir around normal
+					float dotNL2 = 2.f * dotNL;
+					vector_t r;
+					r.x = dotNL2 * n->x - localLight.x;
+					r.y = dotNL2 * n->y - localLight.y;
+					r.z = dotNL2 * n->z - localLight.z;
+					normalize3(&r);
+					// Compute vector from surface to camera.
+					vec3f_t* vObj = &obj->vertices[i];
+					vector_t v; 
+					v.x = localCamera.x - vObj->x;
+					v.y = localCamera.y - vObj->y;
+					v.z = localCamera.z - vObj->z;
+					normalize3(&v);
+	
+					float dotRV = (r.x * v.x + r.y * v.y + r.z * v.z);
+					dotRV = MAX(dotRV, 0.f);
+					float specular = 1.f;
+					for(uint8_t sId = 0; sId < obj->shininess; ++sId){
+						specular *= dotRV;
+					}
+					specClamped = (unsigned char)(clamp(specular, 0.f, 1.0f) * 255.f);
 				}
-				unsigned char specClamped = (unsigned char)(clamp(specular, 0.f, 1.0f) * 255.f);
 				packedLightings[2 * i + 1] =  0xFF000000 | (specClamped << 16u) | (specClamped << 8u) | specClamped;
+			
 			}
 		}
 
