@@ -23,7 +23,7 @@ typedef struct Object {
 	float angleZ;
 	uint32_t vCount;
 	uint32_t iCount;
-	float shininess;
+	uint8_t shininess;
 	bool lit;
 } Object;
 

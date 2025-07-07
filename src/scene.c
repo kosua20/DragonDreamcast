@@ -115,7 +115,7 @@ void initScene(Scene* scene){
 	scene->objects[0].scale = 1.25f;
 	scene->objects[0].angleY = 0.0f;
 	scene->objects[2].angleZ = 0.0f;
-	scene->objects[0].shininess = 5.0f;
+	scene->objects[0].shininess = 5u;
 	scene->objects[0].lit = true;
 	loadTexture("/data/monkey.dt", "/data/monkey.dt.pal", &nextPalette, &(scene->objects[0].texture) );
 	
@@ -132,7 +132,7 @@ void initScene(Scene* scene){
 	scene->objects[1].scale = 10.0f;
 	scene->objects[1].angleY = 0.0f;
 	scene->objects[2].angleZ = 0.0f;
-	scene->objects[1].shininess = 20.0f;
+	scene->objects[1].shininess = 20u;
 	scene->objects[1].lit = true;
 	loadTexture("/data/floor.dt", "/data/floor.dt.pal", &nextPalette, &(scene->objects[1].texture) );
 	
@@ -149,7 +149,7 @@ void initScene(Scene* scene){
 	scene->objects[2].scale = 1.5f;
 	scene->objects[2].angleY = 0.0f;
 	scene->objects[2].angleZ = 0.0f;
-	scene->objects[2].shininess = 40.0f;
+	scene->objects[2].shininess = 40u;
 	scene->objects[2].lit = true;
 	loadTexture("/data/dragon.dt", "/data/dragon.dt.pal", &nextPalette, &(scene->objects[2].texture) );
 	
@@ -194,7 +194,7 @@ void initScene(Scene* scene){
 		face->scale = 20.0f;
 		face->angleY = faceAnglesY[i];
 		face->angleZ = faceAnglesZ[i];
-		face->shininess = 0.0f;
+		face->shininess = 0u;
 		face->lit = false;
 		loadTexture(faceNames[i], NULL, &nextPalette, &(face->texture) );
 	}

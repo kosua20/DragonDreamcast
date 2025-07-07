@@ -84,17 +84,63 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 		// Transform object vertices into scratch buffer.
 		mat_transform((vector_t*)obj->vertices, (vector_t*)scratchVertices, obj->vCount, sizeof(vec3f_t));
 	   
-		// Transform light dir in local space
-		vector_t localLight;
+		// Compute diffuse and specular lighting once for each vertex, if needed..
+		uint32_t* packedLightings = (uint32_t*)(((vec3f_t*)scratchVertices) + obj->vCount);
 		if(obj->lit){
-			mat_identity();
+
 			// No translation for light direction
+			mat_identity();
 			mat_rotate_x(obj->angleZ);
 			mat_rotate_y(obj->angleY);
-			localLight = scene->light; 
+			vector_t localLight = scene->light; 
 			mat_trans_single3(localLight.x, localLight.y, localLight.z);
 			// Norm *should* be preserved by transformation
-			normalize3(&localLight);
+			//normalize3(&localLight);
+
+			mat_identity();
+			mat_rotate_x(obj->angleZ);
+			mat_rotate_y(obj->angleY);
+			mat_scale(1.f/obj->scale, 1.f/obj->scale, 1.f/obj->scale);
+			mat_translate(-obj->position.x, -obj->position.y, -obj->position.z);
+			vector_t localCamera = camera->pos;
+			mat_trans_single3(localCamera.x, localCamera.y, localCamera.z);
+			
+			for(uint16_t i = 0; i < obj->vCount; ++i){
+				// Get the normal
+				vec3f_t* n = &obj->normals[i];
+				const float dotNL = n->x * localLight.x + n->y * localLight.y + n->z * localLight.z;//dot3f(n, &localLight);
+				// Diffuse
+				float diffuse = clamp(dotNL, 0.f, 1.0f);
+				// Ambient
+				diffuse += 0.1f;
+				unsigned char diffClamped = (unsigned char)(clamp(diffuse, 0.f, 1.0f) * 255.f);
+				packedLightings[2 * i] = 0xFF000000 | (diffClamped << 16u) | (diffClamped << 8u) | diffClamped;
+				
+				// Specular
+				// Reflect light dir around normal
+				float dotNL2 = 2.f * dotNL;
+				vector_t r;
+				r.x = dotNL2 * n->x - localLight.x;
+				r.y = dotNL2 * n->y - localLight.y;
+				r.z = dotNL2 * n->z - localLight.z;
+				normalize3(&r);
+				// Compute vector from surface to camera.
+				vec3f_t* vObj = &obj->vertices[i];
+				vector_t v; 
+				v.x = localCamera.x - vObj->x;
+				v.y = localCamera.y - vObj->y;
+				v.z = localCamera.z - vObj->z;
+				normalize3(&v);
+
+				float dotRV = (r.x * v.x + r.y * v.y + r.z * v.z);
+				dotRV = MAX(dotRV, 0.f);
+				float specular = 1.f;
+				for(uint8_t sId = 0; sId < obj->shininess; ++sId){
+					specular *= dotRV;
+				}
+				unsigned char specClamped = (unsigned char)(clamp(specular, 0.f, 1.0f) * 255.f);
+				packedLightings[2 * i + 1] =  0xFF000000 | (specClamped << 16u) | (specClamped << 8u) | specClamped;
+			}
 		}
 
 		// Prepare state for draw call
@@ -110,8 +156,8 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 		pvr_poly_cxt_txr(&cxt, PVR_LIST_OP_POLY, PVR_TXRFMT_VQ_ENABLE | PVR_TXRFMT_TWIDDLED | formatFlags, tex->w, tex->h, tex->texture, PVR_FILTER_BILINEAR);
 		cxt.gen.culling = PVR_CULLING_CW; 
 		cxt.gen.shading = PVR_SHADE_GOURAUD;
-		cxt.gen.specular = PVR_SPECULAR_DISABLE; //TODO
-		cxt.fmt.color = PVR_CLRFMT_INTENSITY;
+		cxt.gen.specular = PVR_SPECULAR_ENABLE;
+		cxt.fmt.color = PVR_CLRFMT_ARGBPACKED; // PVR_CLRFMT_INTENSITY seemed incompatible with specular.
 		cxt.depth.comparison = PVR_DEPTHCMP_GREATER;
 		cxt.depth.write = PVR_DEPTHWRITE_ENABLE;
 		cxt.txr.mipmap = PVR_MIPMAP_DISABLE;
@@ -124,7 +170,6 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 		// Init draw state
 		pvr_dr_state_t drs;
 		pvr_dr_init(&drs);
-		
 		for(uint32_t tId = 0; tId < obj->iCount; tId += 3){  
 
 			for(uint8_t vId = 0; vId < 3; ++vId) {
@@ -137,24 +182,17 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 				v->x = vProj->x;
 				v->y = vProj->y;
 				v->z = vProj->z;
-				v->u = obj->uvs[2 * index + 0];
-				v->v = obj->uvs[2 * index + 1];
-				float diffuse = 1.f;
-				float specular = 0.f;
+				uint16_t index2 = 2 * index;
+				v->u = obj->uvs[index2];
+				v->v = obj->uvs[index2 + 1];
+				uint32_t packedDiffuse = 0xFFFFFFFF;
+				uint32_t packedSpecular = 0xFF000000;
 				if(obj->lit){
-					// Get the normal
-					vec3f_t* n = &obj->normals[index];
-					float dotNL = n->x * localLight.x + n->y * localLight.y + n->z * localLight.z;
-					// Diffuse
-					diffuse = clamp(dotNL, 0.0f, 1.0f);
-					// Ambient
-					diffuse += 0.1f;
-					// Specular
-					// TODO
-					specular = clamp(-dotNL, 0.0f, 1.0f);
-				};
-				v->argb = *(uint32_t*)(&diffuse);
-				v->oargb = *(uint32_t*)(&specular);
+					packedDiffuse = packedLightings[index2];
+					packedSpecular = packedLightings[index2 + 1];
+				}
+				v->argb  = packedDiffuse;
+				v->oargb = packedSpecular;
 				pvr_dr_commit(v);
 			}
 		   
@@ -194,7 +232,7 @@ int main(int argc, char **argv) {
 	Scene scene;
 	initScene(&scene);
 
-	vec3f_t* scratchVerts = memalign(32, sizeof(vec3f_t) * scene.maxVertexCount);
+	vec3f_t* scratchVerts = memalign(32, (sizeof(vec3f_t) + 2 * sizeof(unsigned char)) * scene.maxVertexCount);
 	uint32_t frame = 0;
 	for(;;) {
 
