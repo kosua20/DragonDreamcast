@@ -25,6 +25,7 @@ typedef struct Object {
 	uint32_t iCount;
 	uint8_t shininess;
 	bool lit;
+	bool shadowCasting;
 } Object;
 
 typedef struct Scene {

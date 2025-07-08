@@ -68,24 +68,18 @@ void update(Camera* camera, Scene* scene, float time){
 
 void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 	
-
-
+	
 	// General camera transformation    
+
+	pvr_list_begin(PVR_LIST_OP_POLY);
+
+
 	for(uint8_t objectId = 0; objectId < scene->count; ++objectId){
 		const Object* obj = &(scene->objects[objectId]);
-		
-		// Apply local transform
-		mat_load(&camera->viewProj); 
-		mat_translate(obj->position.x, obj->position.y, obj->position.z);
-		mat_scale(obj->scale, obj->scale, obj->scale);
-		mat_rotate_y(obj->angleY);
-		mat_rotate_x(obj->angleZ);
-
-		// Transform object vertices into scratch buffer.
-		mat_transform((vector_t*)obj->vertices, (vector_t*)scratchVertices, obj->vCount, sizeof(vec3f_t));
 
 		// Compute diffuse and specular lighting once for each vertex, if needed..
 		uint32_t* packedLightings = (uint32_t*)(((vec3f_t*)scratchVertices) + obj->vCount);		
+		vec3f_t* srcVertices = obj->vertices;
 
 		if(obj->lit){
 
@@ -148,6 +142,16 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 			}
 		}
 
+		// Apply local transform
+		mat_load(&camera->viewProj); 
+		mat_translate(obj->position.x, obj->position.y, obj->position.z);
+		mat_scale(obj->scale, obj->scale, obj->scale);
+		mat_rotate_y(obj->angleY);
+		mat_rotate_x(obj->angleZ);
+
+		// Transform object vertices into scratch buffer.
+		mat_transform((vector_t*)srcVertices, (vector_t*)scratchVertices, obj->vCount, sizeof(vec3f_t));
+
 		// Prepare state for draw call
 		// Init context
 		const Texture* tex = &(obj->texture);
@@ -158,25 +162,31 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 			formatFlags = PVR_TXRFMT_RGB565;
 		}
 		pvr_poly_cxt_t cxt;
+		pvr_poly_hdr_t hdr;
+
 		pvr_poly_cxt_txr(&cxt, PVR_LIST_OP_POLY, PVR_TXRFMT_VQ_ENABLE | PVR_TXRFMT_TWIDDLED | formatFlags, tex->w, tex->h, tex->texture, PVR_FILTER_BILINEAR);
 		cxt.gen.culling = PVR_CULLING_CW; 
 		cxt.gen.shading = PVR_SHADE_GOURAUD;
 		cxt.gen.specular = PVR_SPECULAR_ENABLE;
+		if(obj->lit){
+			cxt.gen.modifier_mode = PVR_MODIFIER_CHEAP_SHADOW;
+			cxt.fmt.modifier = PVR_MODIFIER_ENABLE;
+		}
 		cxt.fmt.color = PVR_CLRFMT_ARGBPACKED; // PVR_CLRFMT_INTENSITY seemed incompatible with specular.
 		cxt.depth.comparison = PVR_DEPTHCMP_GREATER;
 		cxt.depth.write = PVR_DEPTHWRITE_ENABLE;
 		cxt.txr.mipmap = PVR_MIPMAP_DISABLE;
 		cxt.txr.mipmap_bias = PVR_MIPBIAS_NORMAL;
-		// Generate header from state.
-		pvr_poly_hdr_t hdr;
 		pvr_poly_compile(&hdr, &cxt);
+
+		// Generate header from state.
 		pvr_prim(&hdr, sizeof(hdr));
 
 		// Init draw state
 		pvr_dr_state_t drs;
 		pvr_dr_init(&drs);
-		for(uint32_t tId = 0; tId < obj->iCount; tId += 3){  
 
+		for(uint32_t tId = 0; tId < obj->iCount; tId += 3){  
 			for(uint8_t vId = 0; vId < 3; ++vId) {
 				uint16_t index = obj->indices[tId + vId];
 				vec3f_t* vProj = &scratchVertices[index];
@@ -199,10 +209,95 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 				v->oargb = packedSpecular;
 				pvr_dr_commit(v);
 			}
-		   
 		} 
 		pvr_dr_finish(); 
 	}
+	pvr_list_finish();
+	
+	// Second pass for shadows
+	// These headers are simpler and can be shared.
+	pvr_mod_hdr_t hdrMod;
+	pvr_mod_hdr_t hdrModEnd;
+	pvr_mod_compile(&hdrMod, PVR_LIST_OP_MOD, PVR_MODIFIER_OTHER_POLY, PVR_CULLING_NONE);
+	pvr_mod_compile(&hdrModEnd, PVR_LIST_OP_MOD, PVR_MODIFIER_INCLUDE_LAST_POLY, PVR_CULLING_NONE);
+	// These won't change either.
+	pvr_modifier_vol_t mod;	
+	mod.flags = PVR_CMD_VERTEX_EOL;
+	mod.d1 = mod.d2 = mod.d3 = mod.d4 = mod.d5 = mod.d6 = 0;
+
+	pvr_list_begin(PVR_LIST_OP_MOD);
+
+	for(unsigned int objectId = 0; objectId < scene->count; ++objectId){
+		
+		const Object* obj = &(scene->objects[objectId]);
+		if(!obj->shadowCasting){
+			continue;
+		}
+		
+		// Compute diffuse and specular lighting once for each vertex, if needed..
+		vec3f_t* srcVertices = obj->vertices;
+		if(obj->lit){
+			memcpy(scratchVertices, srcVertices, sizeof(vec3f_t) * obj->vCount);
+			srcVertices = scratchVertices;
+
+			// No translation for light direction
+			mat_identity();
+			mat_rotate_x(-obj->angleZ);
+			mat_rotate_y(-obj->angleY);
+			vector_t localLight = scene->light; 
+			mat_trans_single3(localLight.x, localLight.y, localLight.z);
+			// Norm *should* be preserved by transformation
+			normalize3(&localLight);
+			
+			for(uint16_t i = 0; i < obj->vCount; ++i){
+				// Get the normal
+				vec3f_t* n = &obj->normals[i];
+				const float dotNL = n->x * localLight.x + n->y * localLight.y + n->z * localLight.z;
+				if(dotNL < -0.01f){
+					scratchVertices[i].x -= 10.f * localLight.x;
+					scratchVertices[i].y -= 10.f * localLight.y;
+					scratchVertices[i].z -= 10.f * localLight.z;
+				}
+			}
+		}
+
+		// Apply local transform
+		mat_load(&camera->viewProj); 
+		mat_translate(obj->position.x, obj->position.y, obj->position.z);
+		mat_scale(obj->scale, obj->scale, obj->scale);
+		mat_rotate_y(obj->angleY);
+		mat_rotate_x(obj->angleZ);
+
+		// Transform object vertices into scratch buffer.
+		mat_transform((vector_t*)srcVertices, (vector_t*)scratchVertices, obj->vCount, sizeof(vec3f_t));
+
+		// Apply header.
+		pvr_prim(&hdrMod, sizeof(hdrMod));
+
+		for(uint32_t tId = 0; tId < obj->iCount; tId += 3){  
+			// Last polygon has a special header.
+			if(tId >= obj->iCount - 3){
+				pvr_prim(&hdrModEnd, sizeof(hdrModEnd));
+			}
+			// Populate primitive
+			vec3f_t* a = &scratchVertices[obj->indices[tId ]];
+			mod.ax = a->x;
+    		mod.ay = a->y;
+    		mod.az = a->z;
+			vec3f_t* b = &scratchVertices[obj->indices[tId + 1]];
+    		mod.bx = b->x;
+    		mod.by = b->y;
+    		mod.bz = b->z;
+			vec3f_t* c = &scratchVertices[obj->indices[tId + 2]];
+    		mod.cx = c->x;
+    		mod.cy = c->y;
+    		mod.cz = c->z;
+    		
+			// Apparently cant use direct state.
+			pvr_prim(&mod, sizeof(pvr_modifier_vol_t));
+		}
+	}
+	pvr_list_finish();
 }
 
 int main(int argc, char **argv) {
@@ -213,7 +308,7 @@ int main(int argc, char **argv) {
 
 	pvr_init_params_t params = {
 		/* Enable opaque polygons with size 16 */
-		{ PVR_BINSIZE_16, PVR_BINSIZE_0, PVR_BINSIZE_0, PVR_BINSIZE_0, PVR_BINSIZE_0 },
+		{ PVR_BINSIZE_16, PVR_BINSIZE_16, PVR_BINSIZE_0, PVR_BINSIZE_0, PVR_BINSIZE_0 },
 
 		/* Vertex buffer size 512K */
 		512 * 1024,
@@ -228,6 +323,7 @@ int main(int argc, char **argv) {
 	}
 	pvr_set_bg_color(0.2f, 0.0f, 0.4f);
 	pvr_set_pal_format(PVR_PAL_RGB565);
+	pvr_set_shadow_scale(true, 0.5f);
 	// Camera setup
 	Camera camera;
 	initCamera(&camera);
@@ -245,11 +341,9 @@ int main(int argc, char **argv) {
 
 		pvr_wait_ready();
 		pvr_scene_begin();
-		pvr_list_begin(PVR_LIST_OP_POLY);
-
+		
 		render(&camera, &scene, scratchVerts);
 
-		pvr_list_finish();
 		pvr_scene_finish();
 		++frame;
 	}

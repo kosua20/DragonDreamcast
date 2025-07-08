@@ -117,6 +117,7 @@ void initScene(Scene* scene){
 	scene->objects[2].angleZ = 0.0f;
 	scene->objects[0].shininess = 5u;
 	scene->objects[0].lit = true;
+	scene->objects[0].shadowCasting = true;
 	loadTexture("/data/monkey.dt", "/data/monkey.dt.pal", &nextPalette, &(scene->objects[0].texture) );
 	
 	// Floor
@@ -134,6 +135,7 @@ void initScene(Scene* scene){
 	scene->objects[2].angleZ = 0.0f;
 	scene->objects[1].shininess = 20u;
 	scene->objects[1].lit = true;
+	scene->objects[1].shadowCasting = false;
 	loadTexture("/data/floor.dt", "/data/floor.dt.pal", &nextPalette, &(scene->objects[1].texture) );
 	
 	// Dragon
@@ -151,6 +153,7 @@ void initScene(Scene* scene){
 	scene->objects[2].angleZ = 0.0f;
 	scene->objects[2].shininess = 40u;
 	scene->objects[2].lit = true;
+	scene->objects[2].shadowCasting = true;
 	loadTexture("/data/dragon.dt", "/data/dragon.dt.pal", &nextPalette, &(scene->objects[2].texture) );
 	
 	// Skybox
@@ -196,6 +199,7 @@ void initScene(Scene* scene){
 		face->angleZ = faceAnglesZ[i];
 		face->shininess = 0u;
 		face->lit = false;
+		face->shadowCasting = true;
 		loadTexture(faceNames[i], NULL, &nextPalette, &(face->texture) );
 	}
 	
