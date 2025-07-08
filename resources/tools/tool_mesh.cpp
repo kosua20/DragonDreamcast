@@ -280,7 +280,7 @@ int main(int argc, char** argv){
 
 	of << "vec3f_t normals_" << basename << "[" << vertices_count << "] = {" << std::endl;
 	for(int i = 0; i < mesh.normals.size(); i+=3){
-		of << "\t{.x=" << mesh.normals[i] << ", .y=" << mesh.normals[i+1] <<  ", .z=" << mesh.normals[i+2] << "},\n";
+		of << "\t{.x=" << -mesh.normals[i] << ", .y=" << mesh.normals[i+1] <<  ", .z=" << mesh.normals[i+2] << "},\n";
 		
 	}
 	of << "};" << std::endl << std::endl;
