@@ -95,7 +95,7 @@ void loadTexture(const char* texturePath, const char* palettePath, uint8_t * nex
 void initScene(Scene* scene){
 	uint8_t nextPalette = 0;
 
-	scene->light.x = 1.0f;
+	scene->light.x = -1.0f;
 	scene->light.y = 1.0f;
 	scene->light.z = 1.0f;
 	normalize3(&(scene->light));
@@ -215,7 +215,7 @@ void updateScene(Scene* scene, float time){
 		monkey->angleY += 2.0f * F_PI;
 	}
 
-	scene->light.x = 1.0f;
+	scene->light.x = -1.0f;
 	scene->light.y = 0.5f * fsin(time) + 1.0f;
 	scene->light.z = 1.0f;
 	normalize3(&scene->light);

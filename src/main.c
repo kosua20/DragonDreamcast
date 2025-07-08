@@ -83,23 +83,22 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 
 		// Transform object vertices into scratch buffer.
 		mat_transform((vector_t*)obj->vertices, (vector_t*)scratchVertices, obj->vCount, sizeof(vec3f_t));
-	   
+
 		// Compute diffuse and specular lighting once for each vertex, if needed..
-		uint32_t* packedLightings = (uint32_t*)(((vec3f_t*)scratchVertices) + obj->vCount);
+		uint32_t* packedLightings = (uint32_t*)(((vec3f_t*)scratchVertices) + obj->vCount);		
+
 		if(obj->lit){
 
 			// No translation for light direction
 			mat_identity();
-			mat_rotate_x(obj->angleZ);
-			mat_rotate_y(obj->angleY);
+			mat_rotate_x(-obj->angleZ);
+			mat_rotate_y(-obj->angleY);
 			vector_t localLight = scene->light; 
 			mat_trans_single3(localLight.x, localLight.y, localLight.z);
 			// Norm *should* be preserved by transformation
-			//normalize3(&localLight);
+			normalize3(&localLight);
 
-			mat_identity();
-			mat_rotate_x(obj->angleZ);
-			mat_rotate_y(obj->angleY);
+			// Reuse the current matrix, adding the inverse scale and translate this time.
 			mat_scale(1.f/obj->scale, 1.f/obj->scale, 1.f/obj->scale);
 			mat_translate(-obj->position.x, -obj->position.y, -obj->position.z);
 			vector_t localCamera = camera->pos;
@@ -108,7 +107,8 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 			for(uint16_t i = 0; i < obj->vCount; ++i){
 				// Get the normal
 				vec3f_t* n = &obj->normals[i];
-				const float dotNL = n->x * localLight.x + n->y * localLight.y + n->z * localLight.z;//dot3f(n, &localLight);
+				const float dotNL = n->x * localLight.x + n->y * localLight.y + n->z * localLight.z;
+				
 				// Diffuse
 				float diffuse = clamp(dotNL, 0.f, 1.0f);
 				// Ambient
