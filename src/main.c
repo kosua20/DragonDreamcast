@@ -187,14 +187,13 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 				v->x = vProj->x;
 				v->y = vProj->y;
 				v->z = vProj->z;
-				uint16_t index2 = 2 * index;
-				v->u = obj->uvs[index2];
-				v->v = obj->uvs[index2 + 1];
+				v->u = obj->uvs[index * 2];
+				v->v = obj->uvs[index * 2 + 1];
 				uint32_t packedDiffuse = 0xFFFFFFFF;
 				uint32_t packedSpecular = 0xFF000000;
 				if(obj->lit){
-					packedDiffuse = packedLightings[index2];
-					packedSpecular = packedLightings[index2 + 1];
+					packedDiffuse = packedLightings[index * 2];
+					packedSpecular = packedLightings[index * 2 + 1];
 				}
 				v->argb  = packedDiffuse;
 				v->oargb = packedSpecular;
@@ -237,7 +236,7 @@ int main(int argc, char **argv) {
 	Scene scene;
 	initScene(&scene);
 
-	vec3f_t* scratchVerts = memalign(32, (sizeof(vec3f_t) + 2 * sizeof(unsigned char)) * scene.maxVertexCount);
+	vec3f_t* scratchVerts = memalign(32, (sizeof(vec3f_t) + 2 * sizeof(uint32_t)) * scene.maxVertexCount);
 	uint32_t frame = 0;
 	for(;;) {
 
