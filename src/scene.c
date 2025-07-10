@@ -109,12 +109,19 @@ void initScene(Scene* scene){
 	scene->objects[0].indices = &points_monkey[0];
 	scene->objects[0].vCount = vertex_count_monkey;
 	scene->objects[0].iCount = points_count_monkey;
+
+	scene->objects[0].verticesShadow = &vertices_monkey_shadow[0];
+	scene->objects[0].normalsShadow = &normals_monkey_shadow[0];
+	scene->objects[0].indicesShadow = &points_monkey_shadow[0];
+	scene->objects[0].vCountShadow = vertex_count_monkey_shadow;
+	scene->objects[0].iCountShadow = points_count_monkey_shadow;
+
 	scene->objects[0].position.x = -1.f;
 	scene->objects[0].position.y = 0.f;
 	scene->objects[0].position.z = 1.f;
 	scene->objects[0].scale = 1.25f;
 	scene->objects[0].angleY = 0.0f;
-	scene->objects[2].angleZ = 0.0f;
+	scene->objects[0].angleZ = 0.0f;
 	scene->objects[0].shininess = 5u;
 	scene->objects[0].lit = true;
 	scene->objects[0].shadowCasting = true;
@@ -132,7 +139,7 @@ void initScene(Scene* scene){
 	scene->objects[1].position.z = 0.f; 
 	scene->objects[1].scale = 10.0f;
 	scene->objects[1].angleY = 0.0f;
-	scene->objects[2].angleZ = 0.0f;
+	scene->objects[1].angleZ = 0.0f;
 	scene->objects[1].shininess = 20u;
 	scene->objects[1].lit = true;
 	scene->objects[1].shadowCasting = false;
@@ -145,6 +152,13 @@ void initScene(Scene* scene){
 	scene->objects[2].indices = &points_dragon[0];
 	scene->objects[2].vCount = vertex_count_dragon;
 	scene->objects[2].iCount = points_count_dragon;
+
+	scene->objects[2].verticesShadow = &vertices_dragon[0];
+	scene->objects[2].normalsShadow = &normals_dragon[0];
+	scene->objects[2].indicesShadow = &points_dragon[0];
+	scene->objects[2].vCountShadow = vertex_count_dragon;
+	scene->objects[2].iCountShadow = points_count_dragon;
+
 	scene->objects[2].position.x = 2.1f;
 	scene->objects[2].position.y = 0.1f;
 	scene->objects[2].position.z = -2.1f; 
@@ -199,7 +213,7 @@ void initScene(Scene* scene){
 		face->angleZ = faceAnglesZ[i];
 		face->shininess = 0u;
 		face->lit = false;
-		face->shadowCasting = true;
+		face->shadowCasting = false;
 		loadTexture(faceNames[i], NULL, &nextPalette, &(face->texture) );
 	}
 	

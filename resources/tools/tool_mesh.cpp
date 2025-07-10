@@ -235,9 +235,9 @@ int main(int argc, char** argv){
 	
 	int points_count = mesh.indices.size();
 	int vertices_count = mesh.positions.size()/3;
-	if(!(mesh.positions.size()/3 ==  mesh.texcoords.size()/2 && mesh.positions.size()/3 ==  mesh.normals.size()/3)){
-		return -1;
-	}
+	//if(!(mesh.positions.size()/3 ==  mesh.texcoords.size()/2 && mesh.positions.size()/3 ==  mesh.normals.size()/3)){
+	//	return -1;
+	//}
 
 	
 	if(vertices_count > 0xFFFF){
@@ -278,19 +278,24 @@ int main(int argc, char** argv){
 	}
 	of << "};" << std::endl << std::endl;
 
-	of << "vec3f_t normals_" << basename << "[" << vertices_count << "] = {" << std::endl;
-	for(int i = 0; i < mesh.normals.size(); i+=3){
-		of << "\t{.x=" << -mesh.normals[i] << ", .y=" << mesh.normals[i+1] <<  ", .z=" << mesh.normals[i+2] << "},\n";
-		
+	if(!mesh.normals.empty()){
+		of << "vec3f_t normals_" << basename << "[" << vertices_count << "] = {" << std::endl;
+		for(int i = 0; i < mesh.normals.size(); i+=3){
+			of << "\t{.x=" << -mesh.normals[i] << ", .y=" << mesh.normals[i+1] <<  ", .z=" << mesh.normals[i+2] << "},\n";
+			
+		}
+		of << "};" << std::endl << std::endl;
 	}
-	of << "};" << std::endl << std::endl;
 
-	of << "float texcoords_" << basename << "[" << 2*vertices_count << "] = {" << std::endl;
-	for(int i = 0; i < mesh.texcoords.size(); i+=2){
-		of << "\t" << mesh.texcoords[i] << ", " << (1.0f-mesh.texcoords[i+1]) << ",\n";
-		
+	if(!mesh.texcoords.empty()){
+		of << "float texcoords_" << basename << "[" << 2*vertices_count << "] = {" << std::endl;
+		for(int i = 0; i < mesh.texcoords.size(); i+=2){
+			of << "\t" << mesh.texcoords[i] << ", " << (1.0f-mesh.texcoords[i+1]) << ",\n";
+			
+		}
+		of << "};" << std::endl << std::endl;
 	}
-	of << "};" << std::endl << std::endl;
+	
 	
 	of.close();
 	return 0;

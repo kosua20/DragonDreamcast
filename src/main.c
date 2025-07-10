@@ -235,9 +235,9 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 		}
 		
 		// Compute diffuse and specular lighting once for each vertex, if needed..
-		vec3f_t* srcVertices = obj->vertices;
+		vec3f_t* srcVertices = obj->verticesShadow;
 		if(obj->lit){
-			memcpy(scratchVertices, srcVertices, sizeof(vec3f_t) * obj->vCount);
+			memcpy(scratchVertices, srcVertices, sizeof(vec3f_t) * obj->vCountShadow);
 			srcVertices = scratchVertices;
 
 			// No translation for light direction
@@ -249,9 +249,9 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 			// Norm *should* be preserved by transformation
 			normalize3(&localLight);
 			
-			for(uint16_t i = 0; i < obj->vCount; ++i){
+			for(uint16_t i = 0; i < obj->vCountShadow; ++i){
 				// Get the normal
-				vec3f_t* n = &obj->normals[i];
+				vec3f_t* n = &obj->normalsShadow[i];
 				const float dotNL = n->x * localLight.x + n->y * localLight.y + n->z * localLight.z;
 				if(dotNL < -0.01f){
 					scratchVertices[i].x -= 10.f * localLight.x;
@@ -269,26 +269,26 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 		mat_rotate_x(obj->angleZ);
 
 		// Transform object vertices into scratch buffer.
-		mat_transform((vector_t*)srcVertices, (vector_t*)scratchVertices, obj->vCount, sizeof(vec3f_t));
+		mat_transform((vector_t*)srcVertices, (vector_t*)scratchVertices, obj->vCountShadow, sizeof(vec3f_t));
 
 		// Apply header.
 		pvr_prim(&hdrMod, sizeof(hdrMod));
 
-		for(uint32_t tId = 0; tId < obj->iCount; tId += 3){  
+		for(uint32_t tId = 0; tId < obj->iCountShadow; tId += 3){  
 			// Last polygon has a special header.
-			if(tId >= obj->iCount - 3){
+			if(tId >= obj->iCountShadow - 3){
 				pvr_prim(&hdrModEnd, sizeof(hdrModEnd));
 			}
 			// Populate primitive
-			vec3f_t* a = &scratchVertices[obj->indices[tId ]];
+			vec3f_t* a = &scratchVertices[obj->indicesShadow[tId ]];
 			mod.ax = a->x;
     		mod.ay = a->y;
     		mod.az = a->z;
-			vec3f_t* b = &scratchVertices[obj->indices[tId + 1]];
+			vec3f_t* b = &scratchVertices[obj->indicesShadow[tId + 1]];
     		mod.bx = b->x;
     		mod.by = b->y;
     		mod.bz = b->z;
-			vec3f_t* c = &scratchVertices[obj->indices[tId + 2]];
+			vec3f_t* c = &scratchVertices[obj->indicesShadow[tId + 2]];
     		mod.cx = c->x;
     		mod.cy = c->y;
     		mod.cz = c->z;
