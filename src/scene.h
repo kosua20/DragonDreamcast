@@ -20,6 +20,7 @@ typedef struct Object {
 	vec3f_t* verticesShadow;
 	vec3f_t* normalsShadow;
 	const uint16_t* indicesShadow;
+	const uint16_t* splitsShadow;
 
 	vector_t position;
 	float scale;
@@ -29,6 +30,7 @@ typedef struct Object {
 	uint32_t iCount;
 	uint32_t vCountShadow;
 	uint32_t iCountShadow;
+	uint32_t sCountShadow;
 	uint8_t shininess;
 	bool lit;
 	bool shadowCasting;

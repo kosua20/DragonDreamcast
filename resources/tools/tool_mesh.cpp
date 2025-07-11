@@ -5,6 +5,7 @@
 #include <sstream>
 #include <map>
 #include <iomanip>
+#include <cstdint>
 
 typedef uint32_t u32;
 typedef short int v16;
@@ -16,6 +17,7 @@ typedef struct {
 	std::vector<float> normals;
 	std::vector<float> texcoords;
 	std::vector<unsigned int> indices;
+	std::vector<unsigned int> splits;
 } mesh_t;
 
 
@@ -38,6 +40,7 @@ void loadObj(const std::string & filename, mesh_t & mesh){
 	std::vector<float> normals_temp;
 	std::vector<float> texcoords_temp;
 	std::vector<std::string> faces_temp;
+	std::vector<unsigned int> splits_temp;
 	
 	std::string res;
 	
@@ -97,7 +100,8 @@ void loadObj(const std::string & filename, mesh_t & mesh){
 			faces_temp.push_back(tokens[1]);
 			faces_temp.push_back(tokens[2]);
 			faces_temp.push_back(tokens[3]);
-			
+		} else if(tokens[0] == "s"){
+			splits_temp.push_back((unsigned int)faces_temp.size());
 		} else { // Ignore s, l, g, matl or others
 			continue;
 		}
@@ -168,6 +172,11 @@ void loadObj(const std::string & filename, mesh_t & mesh){
 	}
 	indices_used.clear();
 
+	// Splits are copied as-is
+	mesh.splits = splits_temp;
+	if(mesh.splits.empty()){
+		mesh.splits.push_back(0);
+	}
 	/*
 	// Mode: Expanded
 	// In this mode, vertices are all duplicated. Each face has its set of 3 vertices, not shared with any other face.
@@ -204,11 +213,6 @@ void loadObj(const std::string & filename, mesh_t & mesh){
 	}
 	*/
 	
-	
-	positions_temp.clear();
-	normals_temp.clear();
-	texcoords_temp.clear();
-	faces_temp.clear();
 	std::cout << "OBJ: loaded. " << mesh.indices.size()/3 << " faces, " << mesh.positions.size()/3 << " vertices, " << mesh.normals.size()/3 << " normals, " << mesh.texcoords.size()/2 << " texcoords." << std::endl;
 	return;
 }
@@ -235,9 +239,19 @@ int main(int argc, char** argv){
 	
 	int points_count = mesh.indices.size();
 	int vertices_count = mesh.positions.size()/3;
-	//if(!(mesh.positions.size()/3 ==  mesh.texcoords.size()/2 && mesh.positions.size()/3 ==  mesh.normals.size()/3)){
-	//	return -1;
-	//}
+	int splits_count = mesh.splits.size();
+
+
+	if(!mesh.texcoords.empty()){
+		if(mesh.positions.size()/3 != mesh.texcoords.size()/2){
+			return -1;
+		}
+	}
+	if(!mesh.normals.empty()){
+		if(mesh.positions.size()/3 != mesh.normals.size()/3){
+			return -1;
+		}
+	}
 
 	
 	if(vertices_count > 0xFFFF){
@@ -246,9 +260,13 @@ int main(int argc, char** argv){
 	if(points_count > 0xFFFF){
 		return -1;
 	}
+	if(splits_count > 0xFFFF){
+		return -1;
+	}
 
 	of << "const uint16_t points_count_" << basename << " = " << points_count << ";" << std::endl << std::endl;
 	of << "const uint16_t vertex_count_" << basename << " = " << vertices_count << ";" << std::endl << std::endl;
+	of << "const uint16_t splits_count_" << basename << " = " << splits_count << ";" << std::endl << std::endl;
 	
 	const char* attribute = " __attribute__((aligned(32)))";
 
@@ -265,6 +283,15 @@ int main(int argc, char** argv){
 			of << std::endl;
 		}
 		of << mesh.indices[i+1] << ", " << mesh.indices[i+2] << (i+2 == points_count - 1 ? "" : ", ") << std::endl;
+	}
+	of << "};" << std::endl << std::endl;
+
+	of << "uint16_t splits_" << basename << "[" << splits_count << "] " << attribute << "= {" << std::endl;
+	for(int i = 0; i < splits_count; ++i){
+		of << mesh.splits[i];
+		if(i != splits_count - 1){
+			of << ", ";
+		}
 	}
 	of << "};" << std::endl << std::endl;
 

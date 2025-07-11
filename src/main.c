@@ -286,29 +286,33 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 		mat_transform((vector_t*)srcVertices, (vector_t*)scratchVertices, obj->vCountShadow, sizeof(vec3f_t));
 
 		// Apply header.
-		pvr_prim(&hdrMod, sizeof(hdrMod));
+		for(uint16_t split = 0; split < obj->sCountShadow; ++split)
+		{
+			uint16_t indexStart = obj->splitsShadow[split];
+			uint16_t indexAfterEnd = (split == obj->sCountShadow - 1) ? obj->iCountShadow : obj->splitsShadow[split + 1];
+			uint16_t indexOfLastTri = indexAfterEnd - 3;
 
-		for(uint32_t tId = 0; tId < obj->iCountShadow; tId += 3){  
-			// Last polygon has a special header.
-			if(tId >= obj->iCountShadow - 3){
-				pvr_prim(&hdrModEnd, sizeof(hdrModEnd));
+			pvr_prim(&hdrMod, sizeof(hdrMod));
+			for(uint16_t tId = indexStart; tId < indexAfterEnd; tId += 3u)
+			{
+				if(tId == indexOfLastTri){
+					pvr_prim(&hdrModEnd, sizeof(hdrModEnd));
+				}
+				// Populate primitive
+				vec3f_t* a = &scratchVertices[obj->indicesShadow[tId ]];
+				mod.ax = a->x;
+	    		mod.ay = a->y;
+	    		mod.az = a->z;
+				vec3f_t* b = &scratchVertices[obj->indicesShadow[tId + 1]];
+	    		mod.bx = b->x;
+	    		mod.by = b->y;
+	    		mod.bz = b->z;
+				vec3f_t* c = &scratchVertices[obj->indicesShadow[tId + 2]];
+	    		mod.cx = c->x;
+	    		mod.cy = c->y;
+	    		mod.cz = c->z;
+	    		pvr_prim(&mod, sizeof(mod));
 			}
-			// Populate primitive
-			vec3f_t* a = &scratchVertices[obj->indicesShadow[tId ]];
-			mod.ax = a->x;
-    		mod.ay = a->y;
-    		mod.az = a->z;
-			vec3f_t* b = &scratchVertices[obj->indicesShadow[tId + 1]];
-    		mod.bx = b->x;
-    		mod.by = b->y;
-    		mod.bz = b->z;
-			vec3f_t* c = &scratchVertices[obj->indicesShadow[tId + 2]];
-    		mod.cx = c->x;
-    		mod.cy = c->y;
-    		mod.cz = c->z;
-    		
-			// Apparently cant use direct state.
-			pvr_prim(&mod, sizeof(pvr_modifier_vol_t));
 		}
 	}
 	pvr_list_finish();

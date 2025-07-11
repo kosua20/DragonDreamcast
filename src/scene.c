@@ -113,8 +113,10 @@ void initScene(Scene* scene){
 	scene->objects[0].verticesShadow = &vertices_monkey_shadow[0];
 	scene->objects[0].normalsShadow = &normals_monkey_shadow[0];
 	scene->objects[0].indicesShadow = &points_monkey_shadow[0];
+	scene->objects[0].splitsShadow = &splits_monkey_shadow[0];
 	scene->objects[0].vCountShadow = vertex_count_monkey_shadow;
 	scene->objects[0].iCountShadow = points_count_monkey_shadow;
+	scene->objects[0].sCountShadow = splits_count_monkey_shadow;
 
 	scene->objects[0].position.x = -1.f;
 	scene->objects[0].position.y = 0.f;
