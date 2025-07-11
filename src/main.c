@@ -168,7 +168,7 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 		cxt.gen.culling = PVR_CULLING_CW; 
 		cxt.gen.shading = PVR_SHADE_GOURAUD;
 		cxt.gen.specular = PVR_SPECULAR_ENABLE;
-		if(obj->lit){
+		if(obj->shadowReceiving){
 			cxt.gen.modifier_mode = PVR_MODIFIER_CHEAP_SHADOW;
 			cxt.fmt.modifier = PVR_MODIFIER_ENABLE;
 		}
@@ -338,6 +338,7 @@ int main(int argc, char **argv) {
 	pvr_set_bg_color(0.2f, 0.0f, 0.4f);
 	pvr_set_pal_format(PVR_PAL_RGB565);
 	pvr_set_shadow_scale(true, 0.5f);
+	pvr_set_zclip(0.0001f);
 	// Camera setup
 	Camera camera;
 	initCamera(&camera);

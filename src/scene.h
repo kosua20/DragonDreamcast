@@ -32,6 +32,7 @@ typedef struct Object {
 	uint8_t shininess;
 	bool lit;
 	bool shadowCasting;
+	bool shadowReceiving;
 } Object;
 
 typedef struct Scene {
