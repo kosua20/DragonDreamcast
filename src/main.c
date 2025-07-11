@@ -186,10 +186,24 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 		pvr_dr_state_t drs;
 		pvr_dr_init(&drs);
 
-		for(uint32_t tId = 0; tId < obj->iCount; tId += 3){  
+		for(uint32_t tId = 0; tId < obj->iCount; tId += 3){
+
+			uint16_t indices[3];  
+			vec3f_t* vProjs[3];
+			bool skipPrimitive = false;  
 			for(uint8_t vId = 0; vId < 3; ++vId) {
-				uint16_t index = obj->indices[tId + vId];
-				vec3f_t* vProj = &scratchVertices[index];
+				indices[vId] = obj->indices[tId + vId];
+				vProjs[vId] = &scratchVertices[indices[vId]];
+				if(vProjs[vId]->z < 0.f)
+					skipPrimitive = true;
+			}
+			if(skipPrimitive)
+				continue;
+
+			for(uint8_t vId = 0; vId < 3; ++vId) {
+				vec3f_t* vProj = vProjs[vId];
+				uint16_t index2 = 2 * indices[vId];
+
 				// Create hardware vert
 				pvr_vertex_t* v = pvr_dr_target(drs);
 				// Close strip if needed.
@@ -197,13 +211,13 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 				v->x = vProj->x;
 				v->y = vProj->y;
 				v->z = vProj->z;
-				v->u = obj->uvs[index * 2];
-				v->v = obj->uvs[index * 2 + 1];
+				v->u = obj->uvs[index2];
+				v->v = obj->uvs[index2 + 1];
 				uint32_t packedDiffuse = 0xFFFFFFFF;
 				uint32_t packedSpecular = 0xFF000000;
 				if(obj->lit){
-					packedDiffuse = packedLightings[index * 2];
-					packedSpecular = packedLightings[index * 2 + 1];
+					packedDiffuse = packedLightings[index2];
+					packedSpecular = packedLightings[index2 + 1];
 				}
 				v->argb  = packedDiffuse;
 				v->oargb = packedSpecular;
