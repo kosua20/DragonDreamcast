@@ -156,12 +156,13 @@ void initScene(Scene* scene){
 	scene->objects[2].indices = &points_dragon[0];
 	scene->objects[2].vCount = vertex_count_dragon;
 	scene->objects[2].iCount = points_count_dragon;
-
-	scene->objects[2].verticesShadow = &vertices_dragon[0];
-	scene->objects[2].normalsShadow = &normals_dragon[0];
-	scene->objects[2].indicesShadow = &points_dragon[0];
-	scene->objects[2].vCountShadow = vertex_count_dragon;
-	scene->objects[2].iCountShadow = points_count_dragon;
+	scene->objects[2].verticesShadow = &vertices_dragon_shadow[0];
+	scene->objects[2].normalsShadow = &normals_dragon_shadow[0];
+	scene->objects[2].indicesShadow = &points_dragon_shadow[0];
+	scene->objects[2].splitsShadow = &splits_dragon_shadow[0];
+	scene->objects[2].vCountShadow = vertex_count_dragon_shadow;
+	scene->objects[2].iCountShadow = points_count_dragon_shadow;
+	scene->objects[2].sCountShadow = splits_count_dragon_shadow;
 
 	scene->objects[2].position.x = 2.1f;
 	scene->objects[2].position.y = 0.1f;
@@ -172,7 +173,7 @@ void initScene(Scene* scene){
 	scene->objects[2].shininess = 40u;
 	scene->objects[2].lit = true;
 	scene->objects[2].shadowCasting = true;
-	scene->objects[2].shadowReceiving = false;
+	scene->objects[2].shadowReceiving = true;
 	loadTexture("/data/dragon.dt", "/data/dragon.dt.pal", &nextPalette, &(scene->objects[2].texture) );
 	
 	// Skybox
