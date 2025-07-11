@@ -10,9 +10,6 @@
 
 #include "data.h"
 
-
-
-//"/data/floor.dt"
 void loadTexture(const char* texturePath, const char* palettePath, uint8_t * nextPalette, Texture * output){
 	// We expect all textures to be compressed and RGB565.
 	// Some might use a 8bits palette, others not.
@@ -54,7 +51,7 @@ void loadTexture(const char* texturePath, const char* palettePath, uint8_t * nex
 	output->textureAlloc = pvr_mem_malloc(sizeInBytes);
 	pvr_txr_load(data, output->textureAlloc, sizeInBytes);
 	free(data);
-
+	// Texture pointer might be offset compared to allocation becuase of compression codebook, stored just before the texture data.
 	output->texture = output->textureAlloc;
 	if(codebookSize > 0){
 		output->texture -= 2048;
@@ -100,7 +97,7 @@ void initScene(Scene* scene){
 	scene->light.z = 1.0f;
 	normalize3(&(scene->light));
 
-	scene->count = 3 + 6;
+	scene->count = 3 + 6; // 3 objects, 6 sky faces
 	scene->objects = (Object*)calloc(scene->count, sizeof(Object));
 	
 	scene->objects[0].vertices = &vertices_monkey[0];
@@ -118,16 +115,14 @@ void initScene(Scene* scene){
 	scene->objects[0].iCountShadow = points_count_monkey_shadow;
 	scene->objects[0].sCountShadow = splits_count_monkey_shadow;
 
-	scene->objects[0].position.x = -1.f;
+	scene->objects[0].position.x = -1.5f;
 	scene->objects[0].position.y = 0.f;
 	scene->objects[0].position.z = 1.f;
 	scene->objects[0].scale = 1.25f;
 	scene->objects[0].angleY = 0.0f;
 	scene->objects[0].angleZ = 0.0f;
 	scene->objects[0].shininess = 5u;
-	scene->objects[0].lit = true;
-	scene->objects[0].shadowCasting = true;
-	scene->objects[0].shadowReceiving = false;
+	scene->objects[0].flags = LIT | SHADOW_CAST; // Avoid self shadowing
 	loadTexture("/data/monkey.dt", "/data/monkey.dt.pal", &nextPalette, &(scene->objects[0].texture) );
 	
 	// Floor
@@ -144,9 +139,7 @@ void initScene(Scene* scene){
 	scene->objects[1].angleY = 0.0f;
 	scene->objects[1].angleZ = 0.0f;
 	scene->objects[1].shininess = 20u;
-	scene->objects[1].lit = true;
-	scene->objects[1].shadowCasting = false;
-	scene->objects[1].shadowReceiving = true;
+	scene->objects[1].flags = LIT | SHADOW_RECEIVE; // Receive dragon and monkey shadows
 	loadTexture("/data/floor.dt", "/data/floor.dt.pal", &nextPalette, &(scene->objects[1].texture) );
 	
 	// Dragon
@@ -164,19 +157,17 @@ void initScene(Scene* scene){
 	scene->objects[2].iCountShadow = points_count_dragon_shadow;
 	scene->objects[2].sCountShadow = splits_count_dragon_shadow;
 
-	scene->objects[2].position.x = 2.1f;
+	scene->objects[2].position.x = 1.5f;
 	scene->objects[2].position.y = 0.1f;
 	scene->objects[2].position.z = -2.1f; 
 	scene->objects[2].scale = 1.5f;
 	scene->objects[2].angleY = 0.0f;
 	scene->objects[2].angleZ = 0.0f;
 	scene->objects[2].shininess = 40u;
-	scene->objects[2].lit = true;
-	scene->objects[2].shadowCasting = true;
-	scene->objects[2].shadowReceiving = true;
+	scene->objects[2].flags = LIT | SHADOW_CAST | SHADOW_RECEIVE; // Receive monkey shadow
 	loadTexture("/data/dragon.dt", "/data/dragon.dt.pal", &nextPalette, &(scene->objects[2].texture) );
 	
-	// Skybox
+	// Skybox faces, all using the same geometry with different transformations and textures.
 	const float offset = 199.0f; // Hide seams.
 	vector_t facePositions[] = {
 		{0.0f, 0.0f, -offset},
@@ -218,13 +209,11 @@ void initScene(Scene* scene){
 		face->angleY = faceAnglesY[i];
 		face->angleZ = faceAnglesZ[i];
 		face->shininess = 0u;
-		face->lit = false;
-		face->shadowCasting = false;
-		face->shadowReceiving = false;
+		face->flags = NONE; // Sky is unlit.
 		loadTexture(faceNames[i], NULL, &nextPalette, &(face->texture) );
 	}
 	
-	
+	// Counter for temporary allocations.
 	scene->maxVertexCount = 0;
 	for(unsigned int i = 0; i < scene->count; ++i){
 		scene->maxVertexCount = MAX(scene->maxVertexCount, scene->objects[i].vCount);
@@ -239,7 +228,7 @@ void updateScene(Scene* scene, float time){
 	if( monkey->angleY < 0.0f){
 		monkey->angleY += 2.0f * F_PI;
 	}
-
+	// Oscillates light vertically
 	scene->light.x = -1.0f;
 	scene->light.y = 0.5f * fsin(time) + 1.0f;
 	scene->light.z = 1.0f;
@@ -247,9 +236,11 @@ void updateScene(Scene* scene, float time){
 }
 
 void cleanupScene(Scene* scene){
+	for(unsigned int i = 0; i < scene->count; ++i){
+		pvr_mem_free(scene->objects[i].texture.textureAlloc);
+	}
 	free(scene->objects);
 }
-
 
 void updateCamera(Camera* cam){
 	cam->pos.x = cam->radius * fcos(cam->angleHoriz) * fcos(cam->angleVert);
@@ -264,7 +255,7 @@ void updateCamera(Camera* cam){
 void initCamera(Camera* cam){
 	cam->angleHoriz = F_PI * 0.5f;
 	cam->angleVert = F_PI * 0.15f;
-	cam->radius = 7.0f;
+	cam->radius = 10.0f;
 	setVector(&cam->pos, 0.0f, 0.0f, 0.0f, 1.0f);
 	setVector(&cam->lookAt, 0.0f, 0.0f, 0.0f, 1.0f);
 	setVector(&cam->up , 0.0f, -1.0f, 0.0f, 0.f);

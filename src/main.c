@@ -9,6 +9,11 @@
 #include "helpers.h"
 #include "scene.h"
 
+// Future improvements:
+//  * bump mapping (incompatible with cheap shadows)
+//	* mipmap and trilinear filtering (for now issue with compressed textures)
+//  * VMU goodie (~2D GBA-like scene?)
+
 extern uint8 romdisk[];
 KOS_INIT_FLAGS(INIT_DEFAULT);
 KOS_INIT_ROMDISK(romdisk);
@@ -68,21 +73,16 @@ void update(Camera* camera, Scene* scene, float time){
 
 void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 	
-	
-	// General camera transformation    
-
+	// Render opaque objects 
 	pvr_list_begin(PVR_LIST_OP_POLY);
-
 
 	for(uint8_t objectId = 0; objectId < scene->count; ++objectId){
 		const Object* obj = &(scene->objects[objectId]);
 
 		// Compute diffuse and specular lighting once for each vertex, if needed..
 		uint32_t* packedLightings = (uint32_t*)(((vec3f_t*)scratchVertices) + obj->vCount);		
-		vec3f_t* srcVertices = obj->vertices;
 
-		if(obj->lit){
-
+		if(obj->flags & LIT){
 			// No translation for light direction
 			mat_identity();
 			mat_rotate_x(-obj->angleZ);
@@ -107,11 +107,12 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 				float diffuse = clamp(dotNL, 0.f, 1.0f);
 				// Ambient
 				diffuse += 0.1f;
+				// Pack in 8bits, monochromatic light.
 				unsigned char diffClamped = (unsigned char)(clamp(diffuse, 0.f, 1.0f) * 255.f);
 				packedLightings[2 * i] = 0xFF000000 | (diffClamped << 16u) | (diffClamped << 8u) | diffClamped;
 				
 				// Specular
-				unsigned char specClamped = 0u;
+				uint32_t packedSpec = 0xFF000000;
 				// Only if diffuse positive.
 				if(dotNL >= 0.f){
 					// Reflect light dir around normal
@@ -135,9 +136,11 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 					for(uint8_t sId = 0; sId < obj->shininess; ++sId){
 						specular *= dotRV;
 					}
-					specClamped = (unsigned char)(clamp(specular, 0.f, 1.0f) * 255.f);
+					// Pack in 8bits monochromatic too.
+					unsigned char specClamped = (unsigned char)(clamp(specular, 0.f, 1.0f) * 255.f);
+					packedSpec |= ((specClamped << 16u) | (specClamped << 8u) | specClamped);
 				}
-				packedLightings[2 * i + 1] =  0xFF000000 | (specClamped << 16u) | (specClamped << 8u) | specClamped;
+				packedLightings[2 * i + 1] = packedSpec;
 			
 			}
 		}
@@ -150,7 +153,7 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 		mat_rotate_x(obj->angleZ);
 
 		// Transform object vertices into scratch buffer.
-		mat_transform((vector_t*)srcVertices, (vector_t*)scratchVertices, obj->vCount, sizeof(vec3f_t));
+		mat_transform((vector_t*)obj->vertices, (vector_t*)scratchVertices, obj->vCount, sizeof(vec3f_t));
 
 		// Prepare state for draw call
 		// Init context
@@ -168,7 +171,8 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 		cxt.gen.culling = PVR_CULLING_CW; 
 		cxt.gen.shading = PVR_SHADE_GOURAUD;
 		cxt.gen.specular = PVR_SPECULAR_ENABLE;
-		if(obj->shadowReceiving){
+		if(obj->flags & SHADOW_RECEIVE){
+			// Enable cheap modifier shadow volumes (no need for second texture/rgb, jsut a darkening factor).
 			cxt.gen.modifier_mode = PVR_MODIFIER_CHEAP_SHADOW;
 			cxt.fmt.modifier = PVR_MODIFIER_ENABLE;
 		}
@@ -182,12 +186,12 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 		// Generate header from state.
 		pvr_prim(&hdr, sizeof(hdr));
 
-		// Init draw state
+		// Use direct recording (faster than copying each primitive by hand)
 		pvr_dr_state_t drs;
 		pvr_dr_init(&drs);
 
 		for(uint32_t tId = 0; tId < obj->iCount; tId += 3){
-
+			// Retrieve vertices and check if we should reject the triangle as clipped (easier than real edge clipping)
 			uint16_t indices[3];  
 			vec3f_t* vProjs[3];
 			bool skipPrimitive = false;  
@@ -200,27 +204,28 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 			if(skipPrimitive)
 				continue;
 
+			// Emit vertices.
 			for(uint8_t vId = 0; vId < 3; ++vId) {
 				vec3f_t* vProj = vProjs[vId];
 				uint16_t index2 = 2 * indices[vId];
 
 				// Create hardware vert
 				pvr_vertex_t* v = pvr_dr_target(drs);
-				// Close strip if needed.
+				// Close triangle if needed.
 				v->flags = (vId == 2) ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
 				v->x = vProj->x;
 				v->y = vProj->y;
 				v->z = vProj->z;
 				v->u = obj->uvs[index2];
 				v->v = obj->uvs[index2 + 1];
-				uint32_t packedDiffuse = 0xFFFFFFFF;
-				uint32_t packedSpecular = 0xFF000000;
-				if(obj->lit){
-					packedDiffuse = packedLightings[index2];
-					packedSpecular = packedLightings[index2 + 1];
+				// Store diffuse and specular lightings separately (diffuse modulates the texture, specular adds itself on top).
+				if(obj->flags & LIT){
+					v->argb = packedLightings[index2];
+					v->oargb = packedLightings[index2 + 1];
+				} else {
+					v->argb  = 0xFFFFFFFF;
+				 	v->oargb = 0xFF000000;
 				}
-				v->argb  = packedDiffuse;
-				v->oargb = packedSpecular;
 				pvr_dr_commit(v);
 			}
 		} 
@@ -240,38 +245,33 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 	mod.d1 = mod.d2 = mod.d3 = mod.d4 = mod.d5 = mod.d6 = 0;
 
 	pvr_list_begin(PVR_LIST_OP_MOD);
-
 	for(unsigned int objectId = 0; objectId < scene->count; ++objectId){
 		
 		const Object* obj = &(scene->objects[objectId]);
-		if(!obj->shadowCasting){
+		if(!(obj->flags & SHADOW_CAST)){
 			continue;
 		}
 		
-		// Compute diffuse and specular lighting once for each vertex, if needed..
-		vec3f_t* srcVertices = obj->verticesShadow;
-		if(obj->lit){
-			memcpy(scratchVertices, srcVertices, sizeof(vec3f_t) * obj->vCountShadow);
-			srcVertices = scratchVertices;
-
-			// No translation for light direction
-			mat_identity();
-			mat_rotate_x(-obj->angleZ);
-			mat_rotate_y(-obj->angleY);
-			vector_t localLight = scene->light; 
-			mat_trans_single3(localLight.x, localLight.y, localLight.z);
-			// Norm *should* be preserved by transformation
-			normalize3(&localLight);
-			
-			for(uint16_t i = 0; i < obj->vCountShadow; ++i){
-				// Get the normal
-				vec3f_t* n = &obj->normalsShadow[i];
-				const float dotNL = n->x * localLight.x + n->y * localLight.y + n->z * localLight.z;
-				if(dotNL < -0.01f){
-					scratchVertices[i].x -= 10.f * localLight.x;
-					scratchVertices[i].y -= 10.f * localLight.y;
-					scratchVertices[i].z -= 10.f * localLight.z;
-				}
+		// Copy the source geometry.
+		memcpy(scratchVertices, obj->verticesShadow, sizeof(vec3f_t) * obj->vCountShadow);
+		
+		// No translation for light direction
+		mat_identity();
+		mat_rotate_x(-obj->angleZ);
+		mat_rotate_y(-obj->angleY);
+		vector_t localLight = scene->light; 
+		mat_trans_single3(localLight.x, localLight.y, localLight.z);
+		// Norm *should* be preserved by transformation
+		normalize3(&localLight);
+		// Extrude the geometry along the light direction.
+		for(uint16_t i = 0; i < obj->vCountShadow; ++i){
+			// Get the normal
+			vec3f_t* n = &obj->normalsShadow[i];
+			const float dotNL = n->x * localLight.x + n->y * localLight.y + n->z * localLight.z;
+			if(dotNL < -0.01f){
+				scratchVertices[i].x -= 10.f * localLight.x;
+				scratchVertices[i].y -= 10.f * localLight.y;
+				scratchVertices[i].z -= 10.f * localLight.z;
 			}
 		}
 
@@ -282,23 +282,26 @@ void render(Camera* camera, Scene* scene, vec3f_t* scratchVertices) {
 		mat_rotate_y(obj->angleY);
 		mat_rotate_x(obj->angleZ);
 
-		// Transform object vertices into scratch buffer.
-		mat_transform((vector_t*)srcVertices, (vector_t*)scratchVertices, obj->vCountShadow, sizeof(vec3f_t));
+		// Transform object vertices in place.
+		mat_transform((vector_t*)scratchVertices, (vector_t*)scratchVertices, obj->vCountShadow, sizeof(vec3f_t));
 
-		// Apply header.
+		// Render each submesh (split) as a separate modifier volume. By ensuring each split is more or less convex and well tesselated
+		// we will avoid any weird shadow overlap artifact.
 		for(uint16_t split = 0; split < obj->sCountShadow; ++split)
 		{
-			uint16_t indexStart = obj->splitsShadow[split];
-			uint16_t indexAfterEnd = (split == obj->sCountShadow - 1) ? obj->iCountShadow : obj->splitsShadow[split + 1];
-			uint16_t indexOfLastTri = indexAfterEnd - 3;
-
+			// Range of indices in the submesh.
+			const uint16_t indexStart = obj->splitsShadow[split];
+			const uint16_t indexAfterEnd = (split == obj->sCountShadow - 1) ? obj->iCountShadow : obj->splitsShadow[split + 1];
+			const uint16_t indexOfLastTri = indexAfterEnd - 3;
+			// Start header.
 			pvr_prim(&hdrMod, sizeof(hdrMod));
 			for(uint16_t tId = indexStart; tId < indexAfterEnd; tId += 3u)
 			{
+				// Last primitive requires a special header.
 				if(tId == indexOfLastTri){
 					pvr_prim(&hdrModEnd, sizeof(hdrModEnd));
 				}
-				// Populate primitive
+				// Populate primitive (a full projected triangle, this time)
 				vec3f_t* a = &scratchVertices[obj->indicesShadow[tId ]];
 				mod.ax = a->x;
 	    		mod.ay = a->y;
@@ -323,46 +326,50 @@ int main(int argc, char **argv) {
 	// Mount romdisk
 	fs_romdisk_mount("/data", romdisk, 1);
 
-
+	// Init PVR.
 	pvr_init_params_t params = {
-		/* Enable opaque polygons with size 16 */
+		/* Enable opaque polygons and opaque modifier volumes with size 16 */
 		{ PVR_BINSIZE_16, PVR_BINSIZE_16, PVR_BINSIZE_0, PVR_BINSIZE_0, PVR_BINSIZE_0 },
-
 		/* Vertex buffer size 512K */
 		512 * 1024,
 		0, // No DMA
 		0, //  No FSAA
 		0  // Translucent Autosort enabled.
 	};
-
-	// Init PVR.
 	if(pvr_init(&params) < 0){
 		return -1;
 	}
+	
+	// Bg color for debug
 	pvr_set_bg_color(0.2f, 0.0f, 0.4f);
+	// Format for colors in palette is global.
 	pvr_set_pal_format(PVR_PAL_RGB565);
+	// Enable sahdow modifier volumes with basic rgb scaling.
 	pvr_set_shadow_scale(true, 0.5f);
+	// Front clipping.
 	pvr_set_zclip(0.0001f);
+	
 	// Camera setup
 	Camera camera;
 	initCamera(&camera);
-	
-	// Objects
+	// Scene setup
 	Scene scene;
 	initScene(&scene);
 
+	// Scratch storage for intermediate computations on geometry.
 	vec3f_t* scratchVerts = memalign(32, (sizeof(vec3f_t) + 2 * sizeof(uint32_t)) * scene.maxVertexCount);
+	
+	// Main looooooop.	
 	uint32_t frame = 0;
 	for(;;) {
-
+		// Assume fixed timestep.
 		float time = (float)frame/60.0f;
 		update(&camera, &scene, time);
 
+		// Render the scene once framebuffer is ready.
 		pvr_wait_ready();
 		pvr_scene_begin();
-		
 		render(&camera, &scene, scratchVerts);
-
 		pvr_scene_finish();
 		++frame;
 	}
